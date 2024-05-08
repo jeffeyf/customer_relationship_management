@@ -1,0 +1,19 @@
+service: () -> {
+    addCustomer: (record {name:text; email:text; company:text; phone:text}) -> (variant {Ok:record {id:text; name:text; email:text; company:text; interactions:vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; purchases:vec record {id:text; date:text; quantity:text; price:text; product:text}; phone:text}; Err:variant {InvalidPayload:text; NotFound:text}});
+    addInteraction: (text, record {status:text; date:text; description:text; comments:text; interaction_type:text}) -> (variant {Ok:text; Err:variant {InvalidPayload:text; NotFound:text}});
+    addPurchase: (text, record {date:text; quantity:text; price:text; product:text}) -> (variant {Ok:text; Err:variant {InvalidPayload:text; NotFound:text}});
+    deleteCustomer: (text) -> (variant {Ok:text; Err:variant {InvalidPayload:text; NotFound:text}});
+    deleteInteraction: (text) -> (variant {Ok:text; Err:variant {InvalidPayload:text; NotFound:text}});
+    deletePurchase: (text) -> (variant {Ok:text; Err:variant {InvalidPayload:text; NotFound:text}});
+    filterByStatus: (text) -> (vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}) query;
+    getCustomer: (text) -> (variant {Ok:record {id:text; name:text; email:text; company:text; interactions:vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; purchases:vec record {id:text; date:text; quantity:text; price:text; product:text}; phone:text}; Err:variant {InvalidPayload:text; NotFound:text}}) query;
+    getCustomerInteractions: (text) -> (vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}) query;
+    getCustomerPurchases: (text) -> (vec record {id:text; date:text; quantity:text; price:text; product:text}) query;
+    getCustomers: () -> (vec record {id:text; name:text; email:text; company:text; interactions:vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; purchases:vec record {id:text; date:text; quantity:text; price:text; product:text}; phone:text}) query;
+    getInteraction: (text) -> (variant {Ok:record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; Err:variant {InvalidPayload:text; NotFound:text}}) query;
+    getPurchase: (text) -> (variant {Ok:record {id:text; date:text; quantity:text; price:text; product:text}; Err:variant {InvalidPayload:text; NotFound:text}}) query;
+    getPurchasesByDate: (text) -> (vec record {id:text; date:text; quantity:text; price:text; product:text}) query;
+    updateCustomer: (record {id:text; name:text; email:text; company:text; interactions:vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; purchases:vec record {id:text; date:text; quantity:text; price:text; product:text}; phone:text}) -> (variant {Ok:record {id:text; name:text; email:text; company:text; interactions:vec record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; purchases:vec record {id:text; date:text; quantity:text; price:text; product:text}; phone:text}; Err:variant {InvalidPayload:text; NotFound:text}});
+    updateInteraction: (record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}) -> (variant {Ok:record {id:text; status:text; date:text; description:text; comments:text; interaction_type:text}; Err:variant {InvalidPayload:text; NotFound:text}});
+    updatePurchase: (record {id:text; date:text; quantity:text; price:text; product:text}) -> (variant {Ok:record {id:text; date:text; quantity:text; price:text; product:text}; Err:variant {InvalidPayload:text; NotFound:text}});
+}
