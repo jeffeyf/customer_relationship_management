@@ -1,5 +1,6 @@
 import { query, update, text, Record, StableBTreeMap, Variant, Vec, None, Some, Ok, Err, ic, Principal, nat64, Canister } from "azle";
 import { hashCode } from "hashcode";
+import { v4 as uuidv4 } from "uuid";
 
 // Define record types for Customer interactions
 const Interaction = Record({
