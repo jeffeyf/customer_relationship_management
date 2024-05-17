@@ -1,10 +1,8 @@
-import { query, update, text, Record, StableBTreeMap, Variant, Vec, None, Some, Ok, Err, ic, Principal, Opt, nat64, Duration, Result, bool, Canister } from "azle";
-import {
-    Ledger, binaryAddressFromAddress, binaryAddressFromPrincipal, hexAddressFromPrincipal
-} from "azle/canisters/ledger";
+import { query, update, text, Record, StableBTreeMap, Variant, Vec, None, Some, Ok, Err, ic, Principal, nat64, Canister } from "azle";
 import { hashCode } from "hashcode";
 import { v4 as uuidv4 } from "uuid";
 
+// Define record types for Customer interactions
 const Interaction = Record({
     id: text,
     date: text,
@@ -14,6 +12,7 @@ const Interaction = Record({
     comments: text
 });
 
+// Define record types for Customer purchases
 const Purchase = Record({
     id: text,
     date: text,
@@ -22,6 +21,7 @@ const Purchase = Record({
     price: text,
 });
 
+// Define record type for Customer
 const Customer = Record({
     id: text,
     name: text,
@@ -32,14 +32,13 @@ const Customer = Record({
     purchases: Vec(Purchase)
 });
 
+// Define payload types for creating Customer, Interaction, and Purchase
 const CustomerPayload = Record({
     name: text,
     company: text,
     email: text,
     phone: text,
 });
-
-
 
 const InteractionPayload = Record({
     date: text,
@@ -56,169 +55,196 @@ const PurchasePayload = Record({
     price: text,
 });
 
-
+// Define variant type for response messages
 const Message = Variant({
     NotFound: text,
     InvalidPayload: text,
 });
 
+// Define stable BTree maps for storing Customers, Interactions, and Purchases
 const customerStorage = StableBTreeMap(0, text, Customer);
 const interactionStorage = StableBTreeMap(1, text, Interaction);
 const purchaseStorage = StableBTreeMap(2, text, Purchase);
 
-
-
 export default Canister({
+    // Query function to retrieve all customers
     getCustomers: query([], Vec(Customer), () => {
         return customerStorage.values();
     }),
 
+    // Query function to retrieve a specific customer by ID
     getCustomer: query([text], Result(Customer, Message), (id) => {
         const customerOpt = customerStorage.get(id);
-        if ("None" in customerOpt) {
-            return Err({ NotFound: `customer with id=${id} not found` });
-        }
-        return Ok(customerOpt.Some);
+        return customerOpt.match({
+            None: () => Err({ NotFound: `Customer with ID ${id} not found` }),
+            Some: (customer) => Ok(customer)
+        });
     }),
 
+    // Update function to add a new customer
     addCustomer: update([CustomerPayload], Result(Customer, Message), (payload) => {
-        if (typeof payload !== "object" || Object.keys(payload).length === 0) {
-            return Err({ NotFound: "invalid payoad" })
+        // Validate payload
+        if (!payload.name || !payload.email) {
+            return Err({ InvalidPayload: "Name and email are required" });
         }
-        const customer = { id: uuidv4(), ...payload, interactions: [], purchases: [] };
+        const customer = { id: hashCode().value(payload.email).toString(), ...payload, interactions: [], purchases: [] };
         customerStorage.insert(customer.id, customer);
         return Ok(customer);
     }),
 
-    updateCustomer: update([Customer], Result(Customer, Message), (payload) => {
-        const customerOpt = customerStorage.get(payload.id);
-        if ("None" in customerOpt) {
-            return Err({ NotFound: `cannot update the customer: customer with id=${payload.id} not found` });
-        }
-        customerStorage.insert(customerOpt.Some.id, payload);
-        return Ok(payload);
+    // Update function to update an existing customer
+    updateCustomer: update([Customer], Result(Customer, Message), (updatedCustomer) => {
+        const existingCustomer = customerStorage.get(updatedCustomer.id);
+        return existingCustomer.match({
+            None: () => Err({ NotFound: `Customer with ID ${updatedCustomer.id} not found` }),
+            Some: () => {
+                customerStorage.insert(updatedCustomer.id, updatedCustomer);
+                return Ok(updatedCustomer);
+            }
+        });
     }),
 
+    // Update function to delete a customer
     deleteCustomer: update([text], Result(text, Message), (id) => {
-        const deletedCustomerOpt = customerStorage.remove(id);
-        if ("None" in deletedCustomerOpt) {
-            return Err({ NotFound: `cannot delete the customer: customer with id=${id} not found` });
-        }
-        return Ok(deletedCustomerOpt.Some.id);
+        const deletedCustomer = customerStorage.remove(id);
+        return deletedCustomer.match({
+            None: () => Err({ NotFound: `Customer with ID ${id} not found` }),
+            Some: () => Ok(id)
+        });
     }),
 
+    // Update function to add a new interaction for a customer
     addInteraction: update([text, InteractionPayload], Result(text, Message), (customerId, payload) => {
-        if (typeof payload !== "object" || Object.keys(payload).length === 0) {
-            return Err({ NotFound: "invalid payoad" })
+        // Validate payload
+        if (!payload.date || !payload.interaction_type) {
+            return Err({ InvalidPayload: "Date and interaction type are required" });
         }
-        const interaction = { id: uuidv4(), ...payload };
-        const customerOpt = customerStorage.get(customerId);
-        if ("None" in customerOpt) {
-            return Err({ NotFound: `cannot add interaction: customer with id=${customerId} not found` });
-        }
-        const customer = customerOpt.Some;
-        customer.interactions.push(interaction);
-        customerStorage.insert(customer.id, customer);
-        interactionStorage.insert(interaction.id, interaction);
-        return Ok(interaction.id);
+        const interactionId = hashCode().value(payload.date + customerId).toString();
+        const interaction = { id: interactionId, ...payload };
+        const existingCustomer = customerStorage.get(customerId);
+        return existingCustomer.match({
+            None: () => Err({ NotFound: `Customer with ID ${customerId} not found` }),
+            Some: (customer) => {
+                customer.interactions.push(interaction);
+                customerStorage.insert(customerId, customer);
+                interactionStorage.insert(interactionId, interaction);
+                return Ok(interactionId);
+            }
+        });
     }),
 
+    // Query function to retrieve all interactions of a specific customer
     getCustomerInteractions: query([text], Vec(Interaction), (customerId) => {
-        const customerOpt = customerStorage.get(customerId);
-        if ("None" in customerOpt) {
-            return [];
-        }
-        return customerOpt.Some.interactions;
+        const customer = customerStorage.get(customerId);
+        return customer.match({
+            None: () => [],
+            Some: (c) => c.interactions
+        });
     }),
 
+    // Update function to add a new purchase for a customer
     addPurchase: update([text, PurchasePayload], Result(text, Message), (customerId, payload) => {
-        if (typeof payload !== "object" || Object.keys(payload).length === 0) {
-            return Err({ NotFound: "invalid payoad" })
+        // Validate payload
+        if (!payload.date || !payload.product) {
+            return Err({ InvalidPayload: "Date and product are required" });
         }
-        const purchase = { id: uuidv4(), ...payload };
-        const customerOpt = customerStorage.get(customerId);
-        if ("None" in customerOpt) {
-            return Err({ NotFound: `cannot add purchase: customer with id=${customerId} not found` });
-        }
-        const customer = customerOpt.Some;
-        customer.purchases.push(purchase);
-        customerStorage.insert(customer.id, customer);
-        purchaseStorage.insert(purchase.id, purchase);
-        return Ok(purchase.id);
+        const purchaseId = hashCode().value(payload.date + customerId).toString();
+        const purchase = { id: purchaseId, ...payload };
+        const existingCustomer = customerStorage.get(customerId);
+        return existingCustomer.match({
+            None: () => Err({ NotFound: `Customer with ID ${customerId} not found` }),
+            Some: (customer) => {
+                customer.purchases.push(purchase);
+                customerStorage.insert(customerId, customer);
+                purchaseStorage.insert(purchaseId, purchase);
+                return Ok(purchaseId);
+            }
+        });
     }),
 
+    // Query function to retrieve all purchases of a specific customer
     getCustomerPurchases: query([text], Vec(Purchase), (customerId) => {
-        const customerOpt = customerStorage.get(customerId);
-        if ("None" in customerOpt) {
-            return [];
-        }
-        return customerOpt.Some.purchases;
+        const customer = customerStorage.get(customerId);
+        return customer.match({
+            None: () => [],
+            Some: (c) => c.purchases
+        });
     }),
 
+    // Query function to retrieve a specific purchase by ID
     getPurchase: query([text], Result(Purchase, Message), (id) => {
-        const purchaseOpt = purchaseStorage.get(id);
-        if ("None" in purchaseOpt) {
-            return Err({ NotFound: `purchase with id=${id} not found` });
-        }
-        return Ok(purchaseOpt.Some);
+        const purchase = purchaseStorage.get(id);
+        return purchase.match({
+            None: () => Err({ NotFound: `Purchase with ID ${id} not found` }),
+            Some: (p) => Ok(p)
+        });
     }),
 
+    // Query function to retrieve a specific interaction by ID
     getInteraction: query([text], Result(Interaction, Message), (id) => {
-        const interactionOpt = interactionStorage.get(id);
-        if ("None" in interactionOpt) {
-            return Err({ NotFound: `interaction with id=${id} not found` });
-        }
-        return Ok(interactionOpt.Some);
+        const interaction = interactionStorage.get(id);
+        return interaction.match({
+            None: () => Err({ NotFound: `Interaction with ID ${id} not found` }),
+            Some: (i) => Ok(i)
+        });
     }),
 
-    updateInteraction: update([Interaction], Result(Interaction, Message), (payload) => {
-        const interactionOpt = interactionStorage.get(payload.id);
-        if ("None" in interactionOpt) {
-            return Err({ NotFound: `cannot update the interaction: interaction with id=${payload.id} not found` });
-        }
-        interactionStorage.insert(interactionOpt.Some.id, payload);
-        return Ok(payload);
+    // Update function to update an existing interaction
+    updateInteraction: update([Interaction], Result(Interaction, Message), (updatedInteraction) => {
+        const existingInteraction = interactionStorage.get(updatedInteraction.id);
+        return existingInteraction.match({
+            None: () => Err({ NotFound: `Interaction with ID ${updatedInteraction.id} not found` }),
+            Some: () => {
+                interactionStorage.insert(updatedInteraction.id, updatedInteraction);
+                return Ok(updatedInteraction);
+            }
+        });
     }),
 
+    // Update function to delete an interaction
     deleteInteraction: update([text], Result(text, Message), (id) => {
-        const deletedInteractionOpt = interactionStorage.remove(id);
-        if ("None" in deletedInteractionOpt) {
-            return Err({ NotFound: `cannot delete the interaction: interaction with id=${id} not found` });
-        }
-        return Ok(deletedInteractionOpt.Some.id);
+        const deletedInteraction = interactionStorage.remove(id);
+        return deletedInteraction.match({
+            None: () => Err({ NotFound: `Interaction with ID ${id} not found` }),
+            Some: () => Ok(id)
+        });
     }),
 
-    updatePurchase: update([Purchase], Result(Purchase, Message), (payload) => {
-        const purchaseOpt = purchaseStorage.get(payload.id);
-        if ("None" in purchaseOpt) {
-            return Err({ NotFound: `cannot update the purchase: purchase with id=${payload.id} not found` });
-        }
-        purchaseStorage.insert(purchaseOpt.Some.id, payload);
-        return Ok(payload);
+    // Update function to update an existing purchase
+    updatePurchase: update([Purchase], Result(Purchase, Message), (updatedPurchase) => {
+        const existingPurchase = purchaseStorage.get(updatedPurchase.id);
+        return existingPurchase.match({
+            None: () => Err({ NotFound: `Purchase with ID ${updatedPurchase.id} not found` }),
+            Some: () => {
+                purchaseStorage.insert(updatedPurchase.id, updatedPurchase);
+                return Ok(updatedPurchase);
+            }
+        });
     }),
 
+    // Update function to delete a purchase
     deletePurchase: update([text], Result(text, Message), (id) => {
-        const deletedPurchaseOpt = purchaseStorage.remove(id);
-        if ("None" in deletedPurchaseOpt) {
-            return Err({ NotFound: `cannot delete the purchase: purchase with id=${id} not found` });
-        }
-        return Ok(deletedPurchaseOpt.Some.id);
+        const deletedPurchase = purchaseStorage.remove(id);
+        return deletedPurchase.match({
+            None: () => Err({ NotFound: `Purchase with ID ${id} not found` }),
+            Some: () => Ok(id)
+        });
     }),
 
-    // Filter Interaction by status
+    // Query function to filter interactions by status
     filterByStatus: query([text], Vec(Interaction), (status) => {
         return interactionStorage.values().filter(interaction => interaction.status.toLowerCase() === status.toLowerCase());
     }),
 
-  
+    // Query function to search customers by name
+    searchCustomerByName: query([text], Vec(Customer), (name) => {
+        return customerStorage.values().filter(customer => customer.name.toLowerCase() === name.toLowerCase());
+    }),
 
-
-    // get all purchases of a specific date
+    // Query function to retrieve purchases by date
     getPurchasesByDate: query([text], Vec(Purchase), (date) => {
         return purchaseStorage.values().filter(purchase => purchase.date.toLowerCase() === date.toLowerCase());
     }),
-
-   
 });
 
 /*
@@ -242,4 +268,3 @@ globalThis.crypto = {
         return array;
     }
 };
-
